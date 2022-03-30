@@ -2,6 +2,8 @@ package com.xxl.job.admin.controller;
 
 import com.xxl.job.admin.controller.annotation.PermissionLimit;
 import com.xxl.job.admin.core.conf.XxlJobAdminConfig;
+import com.xxl.job.admin.core.model.XxlJobInfo;
+import com.xxl.job.admin.service.XxlJobService;
 import com.xxl.job.core.biz.AdminBiz;
 import com.xxl.job.core.biz.model.HandleCallbackParam;
 import com.xxl.job.core.biz.model.RegistryParam;
@@ -27,6 +29,9 @@ public class JobApiController {
 
     @Resource
     private AdminBiz adminBiz;
+
+    @Resource
+    private XxlJobService xxlJobService;
 
     /**
      * api
@@ -63,8 +68,23 @@ public class JobApiController {
         } else if ("registryRemove".equals(uri)) {
             RegistryParam registryParam = GsonTool.fromJson(data, RegistryParam.class);
             return adminBiz.registryRemove(registryParam);
+        } else if ("saveJobInfo".equals(uri)){
+            XxlJobInfo xxlJobInfo = GsonTool.fromJson(data, XxlJobInfo.class);
+            return xxlJobService.add(xxlJobInfo);
+        } else if ("updateJobInfo".equals(uri)){
+            XxlJobInfo xxlJobInfo = GsonTool.fromJson(data, XxlJobInfo.class);
+            return xxlJobService.update(xxlJobInfo);
+        } else if ("removeJobInfo".equals(uri)){
+            return xxlJobService.remove(Integer.parseInt(data));
+        } else if ("startJobInfo".equals(uri)){
+            return xxlJobService.triggerOrStart(Integer.parseInt(data));
+        } else if ("stopJobInfo".equals(uri)){
+            return xxlJobService.stop(Integer.parseInt(data));
+        } else if ("updateJobSchedule".equals(uri)){
+            XxlJobInfo xxlJobInfo = GsonTool.fromJson(data, XxlJobInfo.class);
+            return xxlJobService.updateScheduleById(xxlJobInfo);
         } else {
-            return new ReturnT<String>(ReturnT.FAIL_CODE, "invalid request, uri-mapping("+ uri +") not found.");
+            return new ReturnT<>(ReturnT.FAIL_CODE, "invalid request, uri-mapping("+ uri +") not found.");
         }
 
     }

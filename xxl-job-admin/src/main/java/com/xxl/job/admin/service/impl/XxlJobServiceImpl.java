@@ -8,6 +8,8 @@ import com.xxl.job.admin.core.route.ExecutorRouteStrategyEnum;
 import com.xxl.job.admin.core.scheduler.MisfireStrategyEnum;
 import com.xxl.job.admin.core.scheduler.ScheduleTypeEnum;
 import com.xxl.job.admin.core.thread.JobScheduleHelper;
+import com.xxl.job.admin.core.thread.JobTriggerPoolHelper;
+import com.xxl.job.admin.core.trigger.TriggerTypeEnum;
 import com.xxl.job.admin.core.util.I18nUtil;
 import com.xxl.job.admin.dao.*;
 import com.xxl.job.admin.service.XxlJobService;
@@ -303,7 +305,10 @@ public class XxlJobServiceImpl implements XxlJobService {
 	@Override
 	public ReturnT<String> start(int id) {
 		XxlJobInfo xxlJobInfo = xxlJobInfoDao.loadById(id);
+		return start(xxlJobInfo);
+	}
 
+	public ReturnT<String> start(XxlJobInfo xxlJobInfo) {
 		// valid
 		ScheduleTypeEnum scheduleTypeEnum = ScheduleTypeEnum.match(xxlJobInfo.getScheduleType(), ScheduleTypeEnum.NONE);
 		if (ScheduleTypeEnum.NONE == scheduleTypeEnum) {
@@ -431,4 +436,43 @@ public class XxlJobServiceImpl implements XxlJobService {
 		return new ReturnT<Map<String, Object>>(result);
 	}
 
+	@Override
+	public ReturnT<String> triggerOrStart(int id) {
+		XxlJobInfo xxlJobInfo = this.xxlJobInfoDao.loadById(id);
+		ScheduleTypeEnum scheduleTypeEnum = ScheduleTypeEnum.match(xxlJobInfo.getScheduleType(), ScheduleTypeEnum.NONE);
+		if (ScheduleTypeEnum.NONE == scheduleTypeEnum) {
+			String executorParam = xxlJobInfo.getExecutorParam();
+			// force cover job param
+			if (executorParam == null) {
+				executorParam = "";
+			}
+			JobTriggerPoolHelper.trigger(id, TriggerTypeEnum.MANUAL, -1, null, executorParam, null);
+			return ReturnT.SUCCESS;
+		}
+		return start(xxlJobInfo);
+	}
+
+	@Override
+	public ReturnT<String> updateScheduleById(XxlJobInfo jobInfo) {
+		XxlJobInfo exists_jobInfo = xxlJobInfoDao.loadById(jobInfo.getId());
+		if (exists_jobInfo != null) {
+			jobInfo.setExecutorParam(exists_jobInfo.getExecutorParam());
+
+			jobInfo.setExecutorParam(exists_jobInfo.getExecutorParam());
+			jobInfo.setJobGroup(exists_jobInfo.getJobGroup());
+			jobInfo.setJobDesc(exists_jobInfo.getJobDesc());
+			jobInfo.setAuthor(exists_jobInfo.getAuthor());
+			jobInfo.setAlarmEmail(exists_jobInfo.getAlarmEmail());
+			jobInfo.setMisfireStrategy(exists_jobInfo.getMisfireStrategy());
+			jobInfo.setExecutorRouteStrategy(exists_jobInfo.getExecutorRouteStrategy());
+			jobInfo.setExecutorHandler(exists_jobInfo.getExecutorHandler());
+			jobInfo.setExecutorParam(exists_jobInfo.getExecutorParam());
+			jobInfo.setChildJobId(exists_jobInfo.getChildJobId());
+
+			return this.update(jobInfo);
+		} else {
+			return new ReturnT<>(ReturnT.FAIL_CODE, (I18nUtil.getString("jobinfo_field_id")+I18nUtil.getString("system_not_found")) );
+		}
+
+	}
 }

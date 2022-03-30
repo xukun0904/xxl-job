@@ -1,8 +1,11 @@
 package com.xxl.job.admin.core.thread;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xxl.job.admin.core.conf.XxlJobAdminConfig;
 import com.xxl.job.admin.core.cron.CronExpression;
 import com.xxl.job.admin.core.model.XxlJobInfo;
+import com.xxl.job.admin.core.model.XxlTimeConf;
 import com.xxl.job.admin.core.scheduler.MisfireStrategyEnum;
 import com.xxl.job.admin.core.scheduler.ScheduleTypeEnum;
 import com.xxl.job.admin.core.trigger.TriggerTypeEnum;
@@ -12,6 +15,10 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -362,8 +369,91 @@ public class JobScheduleHelper {
             return nextValidTime;
         } else if (ScheduleTypeEnum.FIX_RATE == scheduleTypeEnum /*|| ScheduleTypeEnum.FIX_DELAY == scheduleTypeEnum*/) {
             return new Date(fromTime.getTime() + Integer.valueOf(jobInfo.getScheduleConf())*1000 );
+        }if (ScheduleTypeEnum.TIME_CONF == scheduleTypeEnum) {
+            // 定时配置
+            return generateNextValidTimeByConf(jobInfo.getScheduleConf(), fromTime);
         }
         return null;
     }
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static Date generateNextValidTimeByConf(String scheduleConf, Date fromDate) {
+        try {
+            if (scheduleConf != null && !"".equals(scheduleConf)) {
+                XxlTimeConf timeConf = MAPPER.readValue(scheduleConf, XxlTimeConf.class);
+                ZoneId zoneId = ZoneId.systemDefault();
+                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                String beginTime = timeConf.getBeginTime();
+                String endTime = timeConf.getEndTime();
+                LocalDateTime fromTime = fromDate.toInstant().atZone(zoneId).toLocalDateTime();
+                // 判断时间是否大于起始时间，小于终止时间
+                if (beginTime != null && !"".equals(beginTime) &&
+                        fromTime.compareTo(LocalDateTime.parse(beginTime, dtf)) < 0) {
+                    return null;
+                }
+                if (endTime != null && !"".equals(endTime) &&
+                        fromTime.compareTo(LocalDateTime.parse(endTime, dtf)) > 0) {
+                    return null;
+                }
+                Short schedulePeriod = timeConf.getSchedulePeriod();
+                Integer repetitionPeriod = timeConf.getRepetitionPeriod();
+                String triggerTime = timeConf.getTriggerTime();
+                LocalDateTime nextValidTime;
+                switch (schedulePeriod) {
+                    case 1:
+                        return Date.from(fromTime.plusMinutes(repetitionPeriod).atZone(zoneId).toInstant());
+                    case 2:
+                        if (triggerTime != null && !"".equals(triggerTime)) {
+                            int[] minutes = Arrays.stream(triggerTime.split(",")).mapToInt(Integer::parseInt).sorted().toArray();
+                            for (int minute : minutes) {
+                                nextValidTime = fromTime.withMinute(minute);
+                                if (nextValidTime.compareTo(fromTime) > 0) {
+                                    return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                                }
+                            }
+                            nextValidTime = fromTime.plusHours(repetitionPeriod).withMinute(minutes[0]);
+                        } else {
+                            nextValidTime = fromTime.plusHours(repetitionPeriod);
+                        }
+                        return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                    case 3:
+                        return Date.from(fromTime.plusDays(repetitionPeriod).atZone(zoneId).toInstant());
+                    case 4:
+                        if (triggerTime != null && !"".equals(triggerTime)) {
+                            int[] weeks = Arrays.stream(triggerTime.split(",")).mapToInt(Integer::parseInt).sorted().toArray();
+                            for (int week : weeks) {
+                                nextValidTime = fromTime.with(DayOfWeek.of(week));
+                                if (nextValidTime.compareTo(fromTime) > 0) {
+                                    return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                                }
+                            }
+                            nextValidTime = fromTime.plusWeeks(repetitionPeriod).with(DayOfWeek.of(weeks[0]));
+                        } else {
+                            nextValidTime = fromTime.plusWeeks(repetitionPeriod);
+                        }
+                        return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                    case 5:
+                        if (triggerTime != null && !"".equals(triggerTime)) {
+                            int[] days = Arrays.stream(triggerTime.split(",")).mapToInt(Integer::parseInt).sorted().toArray();
+                            for (int day : days) {
+                                nextValidTime = fromTime.withDayOfMonth(day);
+                                if (nextValidTime.compareTo(fromTime) > 0) {
+                                    return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                                }
+                            }
+                            nextValidTime = fromTime.plusMonths(repetitionPeriod).withDayOfMonth(days[0]);
+                        } else {
+                            nextValidTime = fromTime.plusMonths(repetitionPeriod);
+                        }
+                        return Date.from(nextValidTime.atZone(zoneId).toInstant());
+                    default:
+                        break;
+                }
+            }
+        } catch (JsonProcessingException e) {
+            logger.error("定时配置转换失败！", e);
+        }
+        return null;
+    }
 }

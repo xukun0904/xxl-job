@@ -180,6 +180,7 @@ public class JobThread extends Thread{
 					);
 
 				} else {
+					// 连续超时30次（每次3秒），即90秒JobThread一直空闲，则销毁
 					if (idleTimes > 30) {
 						if(triggerQueue.size() == 0) {	// avoid concurrent trigger causes jobId-lost
 							XxlJobExecutor.removeJobThread(jobId, "excutor idel times over limit.");
